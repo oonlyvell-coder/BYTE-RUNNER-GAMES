@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>BYTE_RUNNER.exe</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap');
+
+  :root{
+    --bg: #120c04;
+    --bg2: #1c1305;
+    --amber: #ffb000;
+    --amber-dim: #a86f00;
+    --amber-glow: #ffcf5c;
+    --red: #ff4b3e;
+    --green: #6bff8f;
+    --panel: #201705;
+  }
+
+  *{ box-sizing: border-box; }
+
+  html,body{
+    margin:0; padding:0; height:100%;
+    background: var(--bg);
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--amber);
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    padding: 12px;
+  }
+
+  .crt-wrap{
+    position: relative;
+    width: min(480px, 96vw);
+    border: 2px solid var(--amber-dim);
+    border-radius: 10px;
+    background: radial-gradient(ellipse at 50% 0%, var(--bg2), var(--bg) 70%);
+    box-shadow:
+      0 0 0 1px rgba(255,176,0,0.15),
+      0 0 40px rgba(255,176,0,0.12),
+      inset 0 0 60px rgba(0,0,0,0.6);
+    padding: 14px 14px 10px;
+    overflow: hidden;
+  }
+
+  /* scanlines + flicker signature */
+  .crt-wrap::before{
+    content:"";
+    position:absolute; inset:0;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255,176,0,0.05) 0px,
+      rgba(255,176,0,0.05) 1px,
+      transparent 2px,
+      transparent 3px
+    );
+    pointer-events:none;
+    z-index: 5;
+    mix-blend-mode: overlay;
+  }
+  .crt-wrap::after{
+    content:"";
+    position:absolute; inset:0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+    pointer-events:none;
+    z-index:6;
+  }
+  @keyframes flicker{
+    0%,100%{ opacity:1; }
+    92%{ opacity:1; }
+    93%{ opacity:0.85; }
+    94%{ opacity:1; }
+  }
+  .screen{ animation: flicker 6s infinite; }
+
+  .topbar{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size: 12px; letter-spacing: 1px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--amber-dim);
+    margin-bottom: 8px;
+  }
+  .topbar .dot{ color: var(--green); }
+
+  .hud{
+    display:flex; justify-content:space-between;
+    font-size: 13px;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+  }
+  .hud .lives{ color: var(--red); }
+  .hud .lives .dead{ color: #4a2a24; }
+
+  canvas{
+    display:block;
+    width: 100%;
+    height: auto;
+    background:
+      linear-gradient(rgba(255,176,0,0.035) 1px, transparent 1px) 0 0 / 100% 24px,
+      var(--bg);
+    border: 1px solid var(--amber-dim);
+    border-radius: 4px;
+    touch-action: none;
+  }
+
+  .overlay{
+    position:absolute;
+    inset: 0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    background: rgba(10,7,2,0.88);
+    z-index: 10;
+    padding: 20px;
+  }
+  .overlay h1{
+    font-size: clamp(22px, 6vw, 30px);
+    margin: 0 0 6px;
+    color: var(--amber-glow);
+    text-shadow: 0 0 12px rgba(255,176,0,0.6);
+    letter-spacing: 2px;
+  }
+  .overlay p{
+    font-size: 13px;
+    color: var(--amber-dim);
+    max-width: 320px;
+    line-height: 1.6;
+    margin: 4px 0 16px;
+  }
+  .overlay .accent{ color: var(--green); }
+  .overlay .accent2{ color: var(--red); }
+
+  .btn{
+    font-family: inherit;
+    background: transparent;
+    color: var(--amber);
+    border: 1.5px solid var(--amber);
+    padding: 10px 22px;
+    font-size: 14px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all .15s ease;
+  }
+  .btn:hover{ background: var(--amber); color: #1a1204; box-shadow: 0 0 16px rgba(255,176,0,0.5); }
+  .btn:active{ transform: scale(0.96); }
+
+  .score-line{ font-size: 12px; margin-bottom: 4px; color: var(--amber-dim); }
+  .score-line b{ color: var(--amber-glow); }
+
+  .controls{
+    display:flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .ctrl-btn{
+    flex:1;
+    font-family: inherit;
+    background: var(--panel);
+    color: var(--amber);
+    border: 1px solid var(--amber-dim);
+    border-radius: 6px;
+    padding: 14px 0;
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .ctrl-btn:active{ background: var(--amber-dim); color: #1a1204; }
+
+  .hint{
+    text-align:center;
+    font-size: 10.5px;
+    color: var(--amber-dim);
+    margin-top: 8px;
+    letter-spacing: 0.5px;
+  }
+
+  @media (min-width: 620px){
+    .controls{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="crt-wrap">
+  <div class="screen">
+    <div class="topbar">
+      <span><span class="dot">●</span> BYTE_RUNNER.exe</span>
+      <span id="statusText">RUNNING</span>
+    </div>
+
+    <div class="hud">
+      <span>SCORE: <span id="scoreVal">0</span></span>
+      <span class="lives" id="livesVal">♥ ♥ ♥</span>
+      <span>LVL <span id="levelVal">1</span></span>
+    </div>
+
+    <div style="position:relative;">
+      <canvas id="game" width="440" height="480"></canvas>
+
+      <div class="overlay" id="startOverlay">
+        <h1>BYTE RUNNER</h1>
+        <p>
+          Kamu adalah kursor kode <span class="accent">_</span> yang berlari di antara 5 lane.<br>
+          Tangkap <span class="accent">{ } ; # &lt;/&gt;</span> untuk poin.<br>
+          Hindari <span class="accent2">bug merah</span> — 3 kali kena, game over.
+        </p>
+        <button class="btn" id="startBtn">MULAI ▶</button>
+        <div class="hint">Panah kiri/kanan atau A/D · tombol layar di HP</div>
+      </div>
+
+      <div class="overlay" id="gameOverOverlay" style="display:none;">
+        <h1>SEGFAULT</h1>
+        <p class="score-line">Skor akhir: <b id="finalScore">0</b></p>
+        <p class="score-line">Rekor tertinggi: <b id="finalHigh">0</b></p>
+        <button class="btn" id="restartBtn">ULANGI ▶</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="ctrl-btn" id="leftBtn">◀</button>
+      <button class="ctrl-btn" id="rightBtn">▶</button>
+    </div>
+
+    <div class="hint" id="desktopHint">A / ◀ pindah kiri &nbsp;·&nbsp; D / ▶ pindah kanan</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const LANES = 5;
+  const LANE_W = W / LANES;
+
+  const scoreEl = document.getElementById('scoreVal');
+  const livesEl = document.getElementById('livesVal');
+  const levelEl = document.getElementById('levelVal');
+  const statusEl = document.getElementById('statusText');
+  const startOverlay = document.getElementById('startOverlay');
+  const gameOverOverlay = document.getElementById('gameOverOverlay');
+  const finalScoreEl = document.getElementById('finalScore');
+  const finalHighEl = document.getElementById('finalHigh');
+
+  let highScore = 0;
+
+  const GOOD_SYMBOLS = ['{ }', ';', '#', '</>', '=>', '[ ]'];
+  const BAD_SYMBOL = 'BUG';
+
+  let state = {
+    running: false,
+    playerLane: 2,
+    score: 0,
+    lives: 3,
+    level: 1,
+    items: [],
+    frame: 0,
+    spawnEvery: 55,
+    fallSpeed: 2.6,
+    lastTime: 0
+  };
+
+  function laneX(lane){ return lane * LANE_W + LANE_W/2; }
+
+  function resetState(){
+    state.running = true;
+    state.playerLane = 2;
+    state.score = 0;
+    state.lives = 3;
+    state.level = 1;
+    state.items = [];
+    state.frame = 0;
+    state.spawnEvery = 55;
+    state.fallSpeed = 2.6;
+    updateHud();
+  }
+
+  function updateHud(){
+    scoreEl.textContent = state.score;
+    levelEl.textContent = state.level;
+    let hearts = '';
+    for(let i=0;i<3;i++){
+      hearts += (i < state.lives) ? '♥ ' : '<span class="dead">♥</span> ';
+    }
+    livesEl.innerHTML = hearts.trim();
+  }
+
+  function spawnItem(){
+    const lane = Math.floor(Math.random()*LANES);
+    const isBad = Math.random() < 0.32;
+    const symbol = isBad ? BAD_SYMBOL : GOOD_SYMBOLS[Math.floor(Math.random()*GOOD_SYMBOLS.length)];
+    state.items.push({ lane, y: -20, symbol, isBad, caught:false });
+  }
+
+  function movePlayer(dir){
+    if(!state.running) return;
+    state.playerLane = Math.max(0, Math.min(LANES-1, state.playerLane + dir));
+  }
+
+  function drawGrid(){
+    ctx.strokeStyle = 'rgba(255,176,0,0.08)';
+    ctx.lineWidth = 1;
+    for(let i=1;i<LANES;i++){
+      ctx.beginPath();
+      ctx.moveTo(i*LANE_W, 0);
+      ctx.lineTo(i*LANE_W, H);
+      ctx.stroke();
+    }
+  }
+
+  function drawPlayer(){
+    const x = laneX(state.playerLane);
+    const y = H - 46;
+    const blink = Math.floor(state.frame/20) % 2 === 0;
+
+    ctx.font = '700 26px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffcf5c';
+    ctx.shadowColor = '#ffb000';
+    ctx.shadowBlur = 14;
+    ctx.fillText('[' + (blink ? '_' : ' ') + ']', x, y);
+    ctx.shadowBlur = 0;
+  }
+
+  function drawItems(){
+    ctx.textAlign = 'center';
+    ctx.font = '600 16px "JetBrains Mono", monospace';
+    for(const it of state.items){
+      ctx.fillStyle = it.isBad ? '#ff4b3e' : '#6bff8f';
+      ctx.shadowColor = it.isBad ? '#ff4b3e' : '#6bff8f';
+      ctx.shadowBlur = 8;
+      ctx.fillText(it.symbol, laneX(it.lane), it.y);
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  function loop(){
+    if(!state.running){ return; }
+    state.frame++;
+
+    ctx.clearRect(0,0,W,H);
+    drawGrid();
+
+    if(state.frame % state.spawnEvery === 0){
+      spawnItem();
+    }
+
+    for(const it of state.items){
+      it.y += state.fallSpeed;
+    }
+
+    const catchY = H - 46;
+    for(const it of state.items){
+      if(!it.caught && it.y >= catchY - 16 && it.y <= catchY + 16 && it.lane === state.playerLane){
+        it.caught = true;
+        if(it.isBad){
+          state.lives--;
+        } else {
+          state.score += 10;
+          if(state.score > 0 && state.score % 100 === 0){
+            state.level++;
+            state.fallSpeed += 0.4;
+            state.spawnEvery = Math.max(28, state.spawnEvery - 4);
+          }
+        }
+        updateHud();
+      }
+    }
+
+    for(const it of state.items){
+      if(!it.caught && it.y > H + 10 && it.isBad === false){
+        // missed good item, no penalty
+        it.caught = true;
+      }
+    }
+
+    state.items = state.items.filter(it => it.y < H + 30 && !(it.caught && it.y < catchY + 16));
+
+    drawItems();
+    drawPlayer();
+
+    if(state.lives <= 0){
+      endGame();
+      return;
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  function endGame(){
+    state.running = false;
+    statusEl.textContent = 'CRASHED';
+    if(state.score > highScore) highScore = state.score;
+    finalScoreEl.textContent = state.score;
+    finalHighEl.textContent = highScore;
+    gameOverOverlay.style.display = 'flex';
+  }
+
+  function startGame(){
+    startOverlay.style.display = 'none';
+    gameOverOverlay.style.display = 'none';
+    statusEl.textContent = 'RUNNING';
+    resetState();
+    requestAnimationFrame(loop);
+  }
+
+  document.getElementById('startBtn').addEventListener('click', startGame);
+  document.getElementById('restartBtn').addEventListener('click', startGame);
+
+  document.getElementById('leftBtn').addEventListener('click', () => movePlayer(-1));
+  document.getElementById('rightBtn').addEventListener('click', () => movePlayer(1));
+
+  window.addEventListener('keydown', (e) => {
+    if(['ArrowLeft','a','A'].includes(e.key)) movePlayer(-1);
+    if(['ArrowRight','d','D'].includes(e.key)) movePlayer(1);
+    if(e.key === ' ' && !state.running) startGame();
+  });
+
+  // simple swipe support
+  let touchStartX = null;
+  canvas.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+  canvas.addEventListener('touchend', (e) => {
+    if(touchStartX === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if(Math.abs(dx) > 30){ movePlayer(dx > 0 ? 1 : -1); }
+    touchStartX = null;
+  });
+
+  if(/Mobi|Android/i.test(navigator.userAgent)){
+    document.getElementById('desktopHint').style.display = 'none';
+  }
+})();
+</script>
+
+</body>
+</html>
+                   
